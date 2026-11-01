@@ -43,7 +43,7 @@ EXPLAIN_TASK = """TASK: Explain this single moment to the fan in 2 to 4 sentence
 
 Use state_before and state_after to show how the situation changed (runs needed, balls remaining, required run rate, required_rate_change).
 - For a wicket: mention how many the batter had scored, the partnership that just ended and how many wickets have fallen. The wicket cost the team a batter, but it did not change the required run rate. If the rate moved, say it moved only because a ball was used and the runs needed did not fall. Never say the wicket raised the rate.
-- For a six or a four: mention what it did to the required run rate and how the batter is going.
+- For a six or a four: mention what it did to the required run rate and how the batter is going. batter_innings already includes this ball, so give the totals exactly as shown (for example "15 off 9 balls, with 1 six") and never say "first", "second" or "another" boundary, because you must not count them yourself.
 - For an expensive over: mention the ball-by-ball runs, name who scored them using batters_in_over (the batter with the most runs_in_over is the hero), and how it changed the pressure.
 Say when it happened using the "when" text. Talk only about this moment. Do not mention anything that happens after it."""
 
