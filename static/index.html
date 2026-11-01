@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MatchMitra - AI cricket companion</title>
+  <meta name="description" content="MatchMitra explains a live T20 chase in simple words: catch up on the last 5 overs, understand key moments and ask questions. Simulated match data.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23b3262e'/%3E%3Cpath d='M7 8c6 5 6 11 0 16M25 8c-6 5-6 11 0 16' stroke='%23fff' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #edf1ee;
+      --surface: #ffffff;
+      --ink: #10231c;
+      --muted: #55655e;
+      --line: #d3dcd7;
+      --pitch: #0f5d43;
+      --pitch-deep: #0c3a2c;
+      --pitch-soft: #dcefe6;
+      --four: #1d5fd1;
+      --six: #c24a00;
+      --wicket: #c4262e;
+      --extra-bg: #fff3d6;
+      --extra-ink: #7a4e00;
+      --focus: #1d5fd1;
+      --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+      --body: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: 0.55; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    [hidden] { display: none !important; }
+
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+    /* Header and simulated-data notice */
+    .top { display: flex; align-items: center; justify-content: space-between; padding: 14px 0 10px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: -0.02em; }
+    .brand svg { width: 28px; height: 28px; flex: none; }
+    .brand small { font-family: var(--body); font-weight: 500; font-size: 14px; color: var(--muted); letter-spacing: 0; }
+    .notice {
+      background: var(--extra-bg); color: var(--extra-ink);
+      border: 1px solid #ecd18c; border-radius: 10px;
+      padding: 8px 12px; font-size: 14px; font-weight: 500;
+    }
+
+    /* Layout */
+    .layout { display: grid; gap: 16px; margin: 16px 0 40px; align-items: start; }
+    @media (min-width: 920px) {
+      .layout { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; }
+    }
+    .stack { display: grid; gap: 16px; min-width: 0; }
+    @media (min-width: 920px) {
+      /* The helper panel stays on screen while the fan scrolls the scoreboard side. */
+      #ai-panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+    }
+
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+    .card h2 { margin: 0 0 4px; font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .hint { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* Scoreboard */
+    .board { background: var(--pitch-deep); color: #eef6f2; border-radius: 22px; padding: 20px 20px 18px; }
+    .board-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .board-team { font-weight: 600; font-size: 16px; }
+    .board-sub { color: #a9c7ba; font-size: 14px; }
+    .score { display: flex; align-items: baseline; gap: 12px; margin: 6px 0 2px; flex-wrap: wrap; }
+    .score-num { font-family: var(--display); font-weight: 800; font-size: clamp(60px, 16vw, 100px); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+    .score-overs { font-size: 18px; color: #a9c7ba; font-variant-numeric: tabular-nums; }
+    .need { font-size: 18px; font-weight: 600; margin: 0 0 14px; min-height: 1.5em; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat { background: rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 10px 12px; }
+    .stat dt { font-size: 13px; color: #a9c7ba; }
+    .stat dd { margin: 0; font-family: var(--display); font-weight: 600; font-size: 22px; font-variant-numeric: tabular-nums; }
+    .progress { height: 6px; background: rgba(255, 255, 255, 0.16); border-radius: 99px; margin: 16px 0 14px; overflow: hidden; }
+    .progress > div { height: 100%; width: 0; background: #7fdcb0; border-radius: 99px; }
+    .board-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .board-foot p { margin: 0; font-size: 14px; color: #a9c7ba; max-width: 30ch; }
+
+    /* Latest ball */
+    .latest { display: flex; align-items: center; gap: 14px; }
+    .latest .chip { width: 52px; height: 52px; font-size: 22px; flex: none; }
+    .latest-text { min-width: 0; }
+    .latest-text strong { display: block; font-size: 16px; }
+    .latest-text span { color: var(--muted); font-size: 14px; }
+
+    /* Ball chips: one per delivery, like a scorebook cell */
+    .chip {
+      display: inline-grid; place-items: center;
+      width: 40px; height: 40px; border-radius: 10px;
+      font-family: var(--display); font-weight: 600; font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      background: var(--pitch-soft); color: var(--pitch);
+    }
+    .chip--dot { background: #eef2ef; color: var(--muted); }
+    .chip--four { background: var(--four); color: #fff; }
+    .chip--six { background: var(--six); color: #fff; }
+    .chip--wicket { background: var(--wicket); color: #fff; }
+    .chip--extra { background: var(--extra-bg); color: var(--extra-ink); box-shadow: inset 0 0 0 2px #e2b24a; }
+    .chip--now { box-shadow: 0 0 0 3px var(--ink); }
+    .chip--extra.chip--now { box-shadow: inset 0 0 0 2px #e2b24a, 0 0 0 3px var(--ink); }
+
+    /* Controls */
+    .controls { display: grid; gap: 14px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row-label { font-size: 14px; color: var(--muted); min-width: 64px; }
+    .btn {
+      min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent;
+      font-weight: 600; background: var(--surface);
+    }
+    .btn-primary { background: var(--pitch); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #0b4a35; }
+    .btn-light { background: #eef6f2; color: var(--pitch-deep); }
+    .btn-light:hover:not(:disabled) { background: #fff; }
+    .btn-ghost { border-color: var(--line); background: #fff; }
+    .btn-ghost:hover:not(:disabled) { background: var(--pitch-soft); }
+    .btn-small { min-height: 36px; padding: 0 12px; font-size: 14px; }
+    .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .seg button { border: 0; background: #fff; min-height: 40px; min-width: 48px; padding: 0 12px; font-weight: 600; }
+    .seg button + button { border-left: 1px solid var(--line); }
+    .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      min-height: 36px; padding: 0 12px; border-radius: 99px;
+      border: 1px solid var(--line); background: #fff; font-size: 14px; font-weight: 500;
+    }
+    .pill:hover:not(:disabled) { background: var(--pitch-soft); border-color: #a6cdbb; }
+    input[type="range"] { width: 100%; accent-color: var(--pitch); height: 28px; margin: 0; }
+    .range-wrap { display: grid; gap: 4px; }
+    .range-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+
+    /* Recent overs */
+    .overs { display: grid; gap: 10px; margin-top: 10px; }
+    .over-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+    .over-row:first-child { border-top: 0; padding-top: 0; }
+    .over-name { font-weight: 600; font-size: 15px; }
+    .over-bowler { display: block; font-weight: 400; font-size: 13px; color: var(--muted); }
+    .over-balls { display: flex; gap: 6px; flex-wrap: wrap; }
+    .over-total { font-family: var(--display); font-weight: 600; font-size: 20px; min-width: 2ch; text-align: right; }
+    .over-row--now .over-name { color: var(--pitch); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; background: #e4ebe7; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+    .tabs button { flex: 1; min-height: 42px; border: 0; background: transparent; border-radius: 9px; font-weight: 600; color: var(--muted); }
+    .tabs button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(16, 35, 28, 0.16); }
+
+    .lead { margin: 0 0 12px; max-width: 52ch; }
+    .answer { margin-top: 14px; background: var(--pitch-soft); border-radius: 12px; padding: 14px 16px; }
+    .answer p { margin: 0 0 8px; max-width: 62ch; }
+    .answer p:last-child, .answer ul:last-child { margin-bottom: 0; }
+    .answer ul { margin: 0 0 8px; padding-left: 20px; max-width: 62ch; }
+    .answer li { margin-bottom: 4px; }
+    .asof { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+    .stale { margin: 6px 0 0; font-size: 13px; color: var(--extra-ink); font-weight: 500; }
+    .error {
+      margin-top: 14px; border: 1px solid #e3a3a6; background: #fdecec; color: #7d1519;
+      border-radius: 12px; padding: 12px 14px; font-size: 15px;
+    }
+    .error button { margin-top: 8px; }
+
+    /* Moments */
+    .moments { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow: auto; display: grid; gap: 10px; }
+    .moment { border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+    .moment-top { display: flex; align-items: flex-start; gap: 10px; }
+    .tag { flex: none; font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 6px; color: #fff; background: var(--pitch); }
+    .tag--four { background: var(--four); }
+    .tag--six { background: var(--six); }
+    .tag--wicket { background: var(--wicket); }
+    .tag--expensive_over { background: var(--ink); }
+    .moment-body { flex: 1; min-width: 0; }
+    .moment-body strong { display: block; font-size: 15px; }
+    .moment-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .moment .answer { margin-top: 10px; font-size: 15px; }
+    .moment-actions { margin-top: 8px; }
+    .empty { color: var(--muted); padding: 12px 0; margin: 0; }
+
+    /* Chat */
+    .log { display: grid; gap: 10px; max-height: 340px; overflow: auto; padding: 2px; margin-bottom: 12px; }
+    .bubble { max-width: 92%; padding: 10px 14px; border-radius: 14px; font-size: 15.5px; }
+    .bubble p { margin: 0 0 6px; }
+    .bubble p:last-child { margin: 0; }
+    .bubble--me { justify-self: end; background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble--ai { justify-self: start; background: var(--pitch-soft); border-bottom-left-radius: 4px; }
+    .bubble--err { justify-self: start; background: #fdecec; color: #7d1519; border: 1px solid #e3a3a6; border-bottom-left-radius: 4px; }
+    .bubble .asof { margin-top: 6px; }
+    .typing { display: inline-flex; gap: 5px; padding: 4px 0; }
+    .typing i { width: 8px; height: 8px; border-radius: 50%; background: var(--pitch); opacity: 0.35; animation: blink 1.1s infinite; }
+    .typing i:nth-child(2) { animation-delay: 0.18s; }
+    .typing i:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+    .ask-form { display: flex; gap: 8px; margin-top: 12px; }
+    .ask-form input { flex: 1; min-width: 0; min-height: 46px; border: 1px solid #9fb0a8; border-radius: 10px; padding: 0 12px; background: #fff; }
+    .counter { font-size: 12px; color: var(--muted); text-align: right; margin-top: 4px; }
+
+    .foot { color: var(--muted); font-size: 13px; padding: 4px 0 32px; max-width: 70ch; }
+
+    .load-error { text-align: center; padding: 40px 16px; }
+
+    @media (max-width: 520px) {
+      .over-row { grid-template-columns: 1fr auto; }
+      .over-row .over-balls { grid-column: 1 / -1; order: 3; }
+      .stat dd { font-size: 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .typing i { animation: none; opacity: 0.7; }
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#b3262e"/><path d="M7 8c6 5 6 11 0 16M25 8c-6 5-6 11 0 16" stroke="#fff" stroke-width="2" fill="none"/></svg>
+        <span>MatchMitra <small>your cricket friend</small></span>
+      </div>
+    </header>
+    <div class="notice" id="sim-notice" role="note">Simulated match data, not a real live match. Teams and players are fictional.</div>
+
+    <div id="app-error" class="load-error" hidden>
+      <p id="app-error-text"></p>
+      <button class="btn btn-primary" id="app-retry" type="button">Try again</button>
+    </div>
+
+    <main class="layout" id="layout" hidden>
+      <!-- Left: scoreboard, replay controls, recent overs -->
+      <div class="stack">
+        <section class="board" aria-labelledby="board-title">
+          <div class="board-head">
+            <div>
+              <div class="board-team" id="board-title"></div>
+              <div class="board-sub" id="board-chase"></div>
+            </div>
+            <div class="board-sub" id="board-match"></div>
+          </div>
+          <div class="score" aria-live="off">
+            <span class="score-num" id="score"></span>
+            <span class="score-overs" id="overs"></span>
+          </div>
+          <p class="need" id="need"></p>
+          <dl class="stats">
+            <div class="stat"><dt>Current rate</dt><dd id="crr"></dd></div>
+            <div class="stat"><dt>Rate needed</dt><dd id="rrr"></dd></div>
+            <div class="stat"><dt>Target</dt><dd id="target"></dd></div>
+          </dl>
+          <div class="progress" aria-hidden="true"><div id="progress-fill"></div></div>
+          <div class="board-foot">
+            <p>Joined late or looked away?</p>
+            <button class="btn btn-light" id="catchup-top" type="button">Catch me up</button>
+          </div>
+        </section>
+
+        <section class="card" aria-label="Latest ball">
+          <div class="latest">
+            <span class="chip" id="latest-chip">-</span>
+            <div class="latest-text">
+              <strong id="latest-title"></strong>
+              <span id="latest-sub"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card controls" aria-labelledby="controls-title">
+          <h2 id="controls-title">Replay</h2>
+          <div class="row">
+            <button class="btn btn-primary" id="play" type="button">Play</button>
+            <button class="btn btn-ghost" id="restart" type="button">Back to first ball</button>
+            <div class="seg" role="group" aria-label="Replay speed" id="speed">
+              <button type="button" data-speed="1" aria-pressed="true">1x</button>
+              <button type="button" data-speed="2" aria-pressed="false">2x</button>
+              <button type="button" data-speed="4" aria-pressed="false">4x</button>
+            </div>
+          </div>
+          <div class="range-wrap">
+            <label class="sr-only" for="slider">Replay position</label>
+            <input type="range" id="slider" min="0" value="0" step="1">
+            <div class="range-meta"><span>First delivery</span><span id="slider-label"></span><span>Last delivery</span></div>
+          </div>
+          <div class="row">
+            <span class="row-label">Jump to</span>
+            <div class="chips" id="jumps"></div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="overs-title">
+          <h2 id="overs-title">Recent overs</h2>
+          <p class="hint">Each box is one delivery. Blue is a four, orange a six, red a wicket, yellow an extra.</p>
+          <div class="overs" id="over-rows"></div>
+        </section>
+      </div>
+
+      <!-- Right: AI helper -->
+      <div class="stack" id="ai-panel">
+        <section class="card" aria-label="MatchMitra helper">
+          <div class="tabs" role="tablist" aria-label="MatchMitra tools">
+            <button type="button" role="tab" id="tab-catchup" aria-controls="panel-catchup" aria-selected="true">Catch up</button>
+            <button type="button" role="tab" id="tab-moments" aria-controls="panel-moments" aria-selected="false">Moments</button>
+            <button type="button" role="tab" id="tab-ask" aria-controls="panel-ask" aria-selected="false">Ask</button>
+          </div>
+
+          <div role="tabpanel" id="panel-catchup" aria-labelledby="tab-catchup">
+            <p class="lead">Get the score, the last 5 overs and who has the upper hand, in a few simple lines.</p>
+            <button class="btn btn-primary" id="catchup-btn" type="button">Catch me up</button>
+            <div id="catchup-out" aria-live="polite"></div>
+          </div>
+
+          <div role="tabpanel" id="panel-moments" aria-labelledby="tab-moments" hidden>
+            <p class="lead">Wickets, fours, sixes and expensive overs so far. Pick one and MatchMitra explains why it mattered.</p>
+            <ul class="moments" id="moments"></ul>
+          </div>
+
+          <div role="tabpanel" id="panel-ask" aria-labelledby="tab-ask" hidden>
+            <div class="log" id="log" aria-live="polite"></div>
+            <div class="chips" id="suggestions"></div>
+            <form class="ask-form" id="ask-form" autocomplete="off">
+              <label class="sr-only" for="question">Your question about the match</label>
+              <input id="question" type="text" maxlength="300" placeholder="Ask about this match">
+              <button class="btn btn-primary" id="ask-send" type="submit">Send</button>
+            </form>
+            <div class="counter"><span id="counter">0</span>/300</div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <p class="foot">The AI only receives the balls up to the position on your screen, so it cannot spoil what comes next. This is a simulated demo, so the full replay is loaded in your browser. Scores, rates and partnerships are calculated in code; the AI only explains them in plain words.</p>
+  </div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const SPEED_BASE_MS = 900;
+    const START_AT_OVER = 10;
+    const JUMP_OVERS = [5, 10, 14, 18];
+    const SUGGESTIONS = [
+      "Who has the momentum?",
+      "Who is batting well right now?",
+      "Why did the required run rate change?",
+      "Will Sahyadri Strikers win?"
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const state = {
+      match: null,
+      balls: [],
+      pos: 0,
+      playing: false,
+      timer: null,
+      speed: 1,
+      moments: [],
+      shownMoments: -1,
+      explain: new Map(),   // ball_index -> {status, text, asOf, open}
+      catchup: null,        // {text, asOf, pos}
+      catchupBusy: false,
+      askBusy: false
+    };
+
+    /* ---------- Small helpers ---------- */
+
+    async function api(path, options) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      try {
+        const res = await fetch(path, Object.assign({
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal
+        }, options));
+        let data = null;
+        try { data = await res.json(); } catch (e) { /* not JSON */ }
+        if (!res.ok) {
+          throw new Error((data && data.error) || "Something went wrong. Please try again.");
+        }
+        return data;
+      } catch (err) {
+        if (err.name === "AbortError") {
+          throw new Error("The answer took too long. Please try again.");
+        }
+        if (err instanceof TypeError) {
+          throw new Error("Could not reach MatchMitra. Check your connection and try again.");
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function postJson(path, body) {
+      return api(path, { method: "POST", body: JSON.stringify(body) });
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function capitalize(text) {
+      return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+    }
+
+    function fmtRate(value) {
+      return value === null || value === undefined ? "-" : Number(value).toFixed(2);
+    }
+
+    function plural(n, word) {
+      return n + " " + word + (n === 1 ? "" : "s");
+    }
+
+    function asOfText(asOf) {
+      return "As of " + asOf.score + " after " + asOf.overs + " overs";
+    }
+
+    // Show AI text safely: plain text only, "- " lines become a list.
+    function renderAnswer(container, text) {
+      container.textContent = "";
+      let list = null;
+      text.replace(/\*\*/g, "").split(/\n+/).map((s) => s.trim()).filter(Boolean).forEach((line) => {
+        if (/^[-*\u2022]\s+/.test(line)) {
+          if (!list) { list = el("ul"); container.appendChild(list); }
+          list.appendChild(el("li", null, line.replace(/^[-*\u2022]\s+/, "")));
+        } else {
+          list = null;
+          container.appendChild(el("p", null, line));
+        }
+      });
+    }
+
+    /* ---------- Ball display ---------- */
+
+    function ballTotal(b) { return b.runs_off_bat + b.extras; }
+
+    function chipInfo(b) {
+      if (b.wicket) return { text: "W", cls: "chip--wicket", words: "wicket" };
+      if (b.extras_type === "wide") return { text: "Wd", cls: "chip--extra", words: "wide" };
+      if (b.extras_type === "no_ball") {
+        return { text: b.runs_off_bat ? "Nb+" + b.runs_off_bat : "Nb", cls: "chip--extra", words: "no-ball" };
+      }
+      if (b.runs_off_bat === 6) return { text: "6", cls: "chip--six", words: "six" };
+      if (b.runs_off_bat === 4) return { text: "4", cls: "chip--four", words: "four" };
+      const total = ballTotal(b);
+      if (total === 0) return { text: "\u2022", cls: "chip--dot", words: "dot ball" };
+      return { text: String(total), cls: "", words: plural(total, "run") };
+    }
+
+    function makeChip(b, isNow) {
+      const info = chipInfo(b);
+      const chip = el("span", "chip " + info.cls + (isNow ? " chip--now" : ""), info.text);
+      chip.setAttribute("role", "img");
+      chip.setAttribute("aria-label", info.words);
+      chip.title = info.words;
+      return chip;
+    }
+
+    function describeBall(b) {
+      if (b.wicket) {
+        return { title: "WICKET: " + b.wicket.player_out + " is out",
+                 sub: capitalize(b.wicket.type) + ", bowler " + b.bowler };
+      }
+      if (b.extras_type === "wide") {
+        return { title: "Wide", sub: b.bowler + " bowls it wide, " + plural(b.extras, "run") + " added" };
+      }
+      if (b.extras_type === "no_ball") {
+        return { title: "No-ball", sub: b.bowler + " oversteps" + (b.runs_off_bat ? ", " + b.batter + " scores " + b.runs_off_bat : "") };
+      }
+      if (b.runs_off_bat === 6) return { title: "SIX", sub: b.batter + " hits " + b.bowler + " over the rope" };
+      if (b.runs_off_bat === 4) return { title: "FOUR", sub: b.batter + " finds the boundary off " + b.bowler };
+      if (b.runs_off_bat === 0) return { title: "Dot ball", sub: b.batter + " scores nothing off " + b.bowler };
+      return { title: plural(b.runs_off_bat, "run"), sub: b.batter + " off " + b.bowler };
+    }
+
+    /* ---------- Rendering the scoreboard side ---------- */
+
+    function renderScoreboard() {
+      const b = state.balls[state.pos];
+      const teams = state.match.teams;
+      $("score").textContent = b.score + "/" + b.wickets;
+      $("overs").textContent = b.overs_completed + " overs";
+      $("crr").textContent = fmtRate(b.current_run_rate);
+      $("rrr").textContent = b.runs_needed <= 0 ? "-" : fmtRate(b.required_run_rate);
+      $("target").textContent = state.match.target;
+
+      let need;
+      if (b.runs_needed <= 0) {
+        need = teams.chasing + " won by " + plural(10 - b.wickets, "wicket");
+      } else if (b.balls_remaining === 0) {
+        need = teams.bowling + " won by " + plural(b.runs_needed, "run");
+      } else {
+        need = "Need " + plural(b.runs_needed, "run") + " from " + plural(b.balls_remaining, "ball");
+      }
+      $("need").textContent = need;
+
+      const done = state.pos + 1;
+      $("progress-fill").style.width = (done / state.balls.length * 100).toFixed(1) + "%";
+      $("slider").value = String(state.pos);
+      // Wides and no-balls are deliveries too, so this counts deliveries, not legal balls.
+      $("slider-label").textContent = "Delivery " + done + " of " + state.balls.length;
+      $("slider").setAttribute("aria-valuetext", "Delivery " + done + " of " + state.balls.length + ", score " + b.score + "/" + b.wickets);
+    }
+
+    function renderLatest() {
+      const b = state.balls[state.pos];
+      const info = chipInfo(b);
+      const chip = $("latest-chip");
+      chip.className = "chip " + info.cls;
+      chip.textContent = info.text;
+      chip.setAttribute("aria-label", info.words);
+      const text = describeBall(b);
+      $("latest-title").textContent = text.title;
+      $("latest-sub").textContent = text.sub;
+    }
+
+    function renderOvers() {
+      const upto = state.balls.slice(0, state.pos + 1);
+      const groups = [];
+      upto.forEach((b) => {
+        let g = groups[groups.length - 1];
+        if (!g || g.over !== b.over) { g = { over: b.over, bowler: b.bowler, balls: [] }; groups.push(g); }
+        g.balls.push(b);
+      });
+      const recent = groups.slice(-3).reverse();
+      const box = $("over-rows");
+      box.textContent = "";
+      recent.forEach((g, i) => {
+        const row = el("div", "over-row" + (i === 0 ? " over-row--now" : ""));
+        const name = el("div", "over-name", "Over " + g.over);
+        name.appendChild(el("span", "over-bowler", g.bowler));
+        const balls = el("div", "over-balls");
+        g.balls.forEach((b) => balls.appendChild(makeChip(b, b.index === state.pos)));
+        const total = g.balls.reduce((sum, b) => sum + ballTotal(b), 0);
+        const totalEl = el("div", "over-total", String(total));
+        totalEl.setAttribute("aria-label", plural(total, "run") + " in this over");
+        row.append(name, balls, totalEl);
+        box.appendChild(row);
+      });
+    }
+
+    function renderStale() {
+      const stale = $("catchup-stale");
+      if (stale) stale.hidden = !(state.catchup && state.catchup.pos !== state.pos);
+    }
+
+    function render() {
+      renderScoreboard();
+      renderLatest();
+      renderOvers();
+      renderMoments(false);
+      renderStale();
+    }
+
+    function setPos(p) {
+      state.pos = Math.max(0, Math.min(state.balls.length - 1, p));
+      render();
+    }
+
+    /* ---------- Replay ---------- */
+
+    function stop() {
+      state.playing = false;
+      clearTimeout(state.timer);
+      $("play").textContent = "Play";
+    }
+
+    function delayFor(b) {
+      const base = SPEED_BASE_MS / state.speed;
+      return (b.wicket || b.runs_off_bat >= 4) ? base * 1.6 : base;
+    }
+
+    function tick() {
+      if (!state.playing) return;
+      if (state.pos >= state.balls.length - 1) { stop(); return; }
+      setPos(state.pos + 1);
+      if (state.pos >= state.balls.length - 1) { stop(); return; }
+      state.timer = setTimeout(tick, delayFor(state.balls[state.pos]));
+    }
+
+    function play() {
+      if (state.pos >= state.balls.length - 1) setPos(0);
+      state.playing = true;
+      $("play").textContent = "Pause";
+      state.timer = setTimeout(tick, delayFor(state.balls[state.pos]));
+    }
+
+    function togglePlay() { state.playing ? stop() : play(); }
+
+    function lastIndexOfOver(over) {
+      let found = -1;
+      state.balls.forEach((b, i) => { if (b.over === over) found = i; });
+      return found;
+    }
+
+    /* ---------- Tabs ---------- */
+
+    function showTab(name) {
+      ["catchup", "moments", "ask"].forEach((t) => {
+        const selected = t === name;
+        $("tab-" + t).setAttribute("aria-selected", String(selected));
+        $("tab-" + t).tabIndex = selected ? 0 : -1;
+        $("panel-" + t).hidden = !selected;
+      });
+    }
+
+    function scrollToPanel() {
+      $("ai-panel").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
+
+    /* ---------- Feature 1: Catch me up ---------- */
+
+    function renderCatchup(error) {
+      const out = $("catchup-out");
+      out.textContent = "";
+      if (error) {
+        const box = el("div", "error", error);
+        box.setAttribute("role", "alert");
+        out.appendChild(box);
+        return;
+      }
+      if (!state.catchup) return;
+      const answer = el("div", "answer");
+      renderAnswer(answer, state.catchup.text);
+      out.appendChild(answer);
+      out.appendChild(el("p", "asof", asOfText(state.catchup.asOf)));
+      const stale = el("p", "stale", "The replay has moved on since this summary. Tap Catch me up for a fresh one.");
+      stale.id = "catchup-stale";
+      stale.hidden = true;
+      out.appendChild(stale);
+      renderStale();
+    }
+
+    async function runCatchup() {
+      if (state.catchupBusy) return;
+      stop();
+      state.catchupBusy = true;
+      ["catchup-btn", "catchup-top"].forEach((id) => { $(id).disabled = true; });
+      $("catchup-btn").textContent = "Catching you up...";
+      const pos = state.pos;
+      try {
+        const data = await postJson("/api/catchup", { ball_index: pos });
+        state.catchup = { text: data.answer, asOf: data.as_of, pos: pos };
+        renderCatchup();
+      } catch (err) {
+        renderCatchup(err.message);
+      } finally {
+        state.catchupBusy = false;
+        ["catchup-btn", "catchup-top"].forEach((id) => { $(id).disabled = false; });
+        $("catchup-btn").textContent = "Catch me up";
+      }
+    }
+
+    /* ---------- Feature 2: Explain this moment ---------- */
+
+    const TAG_NAMES = { wicket: "Wicket", six: "Six", four: "Four", expensive_over: "Big over" };
+
+    function momentItem(m) {
+      const info = state.explain.get(m.ball_index);
+      const li = el("li", "moment");
+      li.dataset.index = String(m.ball_index);
+
+      const top = el("div", "moment-top");
+      top.appendChild(el("span", "tag tag--" + m.type, TAG_NAMES[m.type] || m.type));
+      const body = el("div", "moment-body");
+      body.appendChild(el("strong", null, m.headline.replace(/^[A-Z ]+:\s*/, "")));
+      const meta = el("div", "moment-meta");
+      meta.append(el("span", null, capitalize(m.when)), el("span", null, "Score " + m.score_after));
+      body.appendChild(meta);
+      top.appendChild(body);
+      li.appendChild(top);
+
+      const actions = el("div", "moment-actions");
+      const btn = el("button", "btn btn-ghost btn-small");
+      btn.type = "button";
+      if (!info) {
+        btn.textContent = "Explain this";
+      } else if (info.status === "loading") {
+        btn.textContent = "Explaining...";
+        btn.disabled = true;
+      } else if (info.status === "done") {
+        btn.textContent = info.open ? "Hide explanation" : "Show explanation";
+      } else {
+        btn.textContent = "Try again";
+      }
+      btn.addEventListener("click", () => explainMoment(m));
+      actions.appendChild(btn);
+      li.appendChild(actions);
+
+      if (info && info.status === "done" && info.open) {
+        const answer = el("div", "answer");
+        renderAnswer(answer, info.text);
+        li.appendChild(answer);
+        li.appendChild(el("p", "asof", asOfText(info.asOf)));
+      }
+      if (info && info.status === "error") {
+        const box = el("div", "error", info.text);
+        box.setAttribute("role", "alert");
+        li.appendChild(box);
+      }
+      return li;
+    }
+
+    function refreshMoment(m) {
+      const old = $("moments").querySelector('[data-index="' + m.ball_index + '"]');
+      if (!old) return;
+      const fresh = momentItem(m);
+      old.replaceWith(fresh);
+      const btn = fresh.querySelector("button:not(:disabled)");
+      if (btn) btn.focus();
+    }
+
+    async function explainMoment(m) {
+      stop();
+      const current = state.explain.get(m.ball_index);
+      if (current && current.status === "done") {
+        current.open = !current.open;
+        refreshMoment(m);
+        return;
+      }
+      state.explain.set(m.ball_index, { status: "loading" });
+      refreshMoment(m);
+      try {
+        const data = await postJson("/api/explain", { ball_index: m.ball_index });
+        state.explain.set(m.ball_index, { status: "done", text: data.answer, asOf: data.as_of, open: true });
+      } catch (err) {
+        state.explain.set(m.ball_index, { status: "error", text: err.message });
+      }
+      refreshMoment(m);
+    }
+
+    // All key moments are fetched once. Only moments up to the current ball are shown,
+    // so the list never reveals what happens next.
+    async function loadMoments() {
+      const data = await api("/api/moments?ball_index=" + (state.balls.length - 1));
+      state.moments = data.moments;
+      state.shownMoments = -1;
+      renderMoments(true);
+    }
+
+    function renderMoments(force) {
+      const visible = state.moments.filter((m) => m.ball_index <= state.pos);
+      if (!force && visible.length === state.shownMoments) return;
+      state.shownMoments = visible.length;
+      const list = $("moments");
+      list.textContent = "";
+      if (!visible.length) {
+        list.appendChild(el("li", "empty", "No key moments yet. Press Play or move the replay forward."));
+        return;
+      }
+      visible.slice().reverse().forEach((m) => list.appendChild(momentItem(m)));
+    }
+
+    /* ---------- Feature 3: Ask MatchMitra ---------- */
+
+    function addBubble(kind, text, asOf) {
+      const log = $("log");
+      const bubble = el("div", "bubble bubble--" + kind);
+      if (kind === "ai") {
+        renderAnswer(bubble, text);
+        if (asOf) bubble.appendChild(el("p", "asof", asOfText(asOf)));
+      } else {
+        bubble.textContent = text;
+      }
+      log.appendChild(bubble);
+      log.scrollTop = log.scrollHeight;
+      return bubble;
+    }
+
+    function addTyping() {
+      const bubble = el("div", "bubble bubble--ai");
+      const dots = el("span", "typing");
+      dots.setAttribute("aria-label", "MatchMitra is typing");
+      dots.append(el("i"), el("i"), el("i"));
+      bubble.appendChild(dots);
+      $("log").appendChild(bubble);
+      $("log").scrollTop = $("log").scrollHeight;
+      return bubble;
+    }
+
+    async function sendQuestion(question) {
+      const text = question.trim();
+      if (!text || state.askBusy) return;
+      stop();
+      state.askBusy = true;
+      $("ask-send").disabled = true;
+      addBubble("me", text);
+      $("question").value = "";
+      $("counter").textContent = "0";
+      const typing = addTyping();
+      try {
+        const data = await postJson("/api/ask", { ball_index: state.pos, question: text });
+        typing.remove();
+        addBubble("ai", data.answer, data.as_of);
+      } catch (err) {
+        typing.remove();
+        addBubble("err", err.message);
+      } finally {
+        state.askBusy = false;
+        $("ask-send").disabled = false;
+      }
+    }
+
+    /* ---------- Start up ---------- */
+
+    function buildStaticUi() {
+      const jumps = $("jumps");
+      JUMP_OVERS.forEach((over) => {
+        const idx = lastIndexOfOver(over);
+        if (idx < 0) return;
+        const btn = el("button", "pill", "End of over " + over);
+        btn.type = "button";
+        btn.addEventListener("click", () => { stop(); setPos(idx); });
+        jumps.appendChild(btn);
+      });
+
+      const sug = $("suggestions");
+      SUGGESTIONS.forEach((q) => {
+        const btn = el("button", "pill", q);
+        btn.type = "button";
+        btn.addEventListener("click", () => sendQuestion(q));
+        sug.appendChild(btn);
+      });
+
+      addBubble("ai", "Ask me anything about this match. I only know what has happened up to the ball on your screen.");
+    }
+
+    function bindEvents() {
+      $("play").addEventListener("click", togglePlay);
+      $("restart").addEventListener("click", () => { stop(); setPos(0); });
+      $("slider").addEventListener("input", (e) => { stop(); setPos(Number(e.target.value)); });
+      $("speed").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-speed]");
+        if (!btn) return;
+        state.speed = Number(btn.dataset.speed);
+        $("speed").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      });
+      $("catchup-btn").addEventListener("click", runCatchup);
+      $("catchup-top").addEventListener("click", () => {
+        showTab("catchup");
+        scrollToPanel();
+        runCatchup();
+      });
+      ["catchup", "moments", "ask"].forEach((t) => {
+        $("tab-" + t).addEventListener("click", () => showTab(t));
+      });
+      $("ask-form").addEventListener("submit", (e) => { e.preventDefault(); sendQuestion($("question").value); });
+      $("question").addEventListener("input", (e) => { $("counter").textContent = String(e.target.value.length); });
+    }
+
+    function showLoadError(message) {
+      $("layout").hidden = true;
+      $("app-error").hidden = false;
+      $("app-error-text").textContent = message;
+    }
+
+    async function start() {
+      $("app-error").hidden = true;
+      try {
+        const data = await api("/api/match");
+        state.match = data;
+        state.balls = data.balls;
+        $("board-title").textContent = data.teams.chasing;
+        $("board-chase").textContent = "chasing " + data.target + " against " + data.teams.bowling;
+        $("board-match").textContent = "T20, " + data.total_overs + " overs";
+        $("slider").max = String(data.balls.length - 1);
+        const startIndex = lastIndexOfOver(START_AT_OVER);
+        state.pos = startIndex >= 0 ? startIndex : 0;
+
+        $("layout").hidden = false;
+        if (!$("jumps").children.length) { buildStaticUi(); bindEvents(); }
+        showTab("catchup");
+        render();
+        loadMoments().catch(() => {
+          $("moments").textContent = "";
+          $("moments").appendChild(el("li", "empty", "Key moments could not be loaded. Reload the page to try again."));
+        });
+      } catch (err) {
+        showLoadError(err.message);
+      }
+    }
+
+    $("app-retry").addEventListener("click", start);
+    start();
+  })();
+  </script>
+</body>
+</html>
